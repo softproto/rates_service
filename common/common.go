@@ -16,9 +16,24 @@ type Pair struct {
 	Bid       float64
 }
 
+type Rate struct {
+	Price  string `json:"price"`
+	Volume string `json:"volume"`
+	Amount string `json:"amount"`
+	Factor string `json:"factor"`
+	Type   string `json:"type"`
+}
+
+type Depth struct {
+	Timestamp time.Time `json:"timestamp"`
+	Asks      []Rate    `json:"asks"`
+	Bids      []Rate    `json:"bids"`
+}
+
 var (
-	DB     *sql.DB
-	Market string
+	DB        *sql.DB
+	Market    string
+	SourceAPI string
 )
 
 func Prepare() error {
@@ -31,6 +46,11 @@ func Prepare() error {
 	Market = os.Getenv("MARKET")
 	if Market == "" {
 		return errors.New("could not get Market ID")
+	}
+
+	SourceAPI = os.Getenv("SOURCE_API")
+	if SourceAPI == "" {
+		return errors.New("could not get source URL")
 	}
 
 	DB, err = sql.Open("postgres", fmt.Sprintf(
