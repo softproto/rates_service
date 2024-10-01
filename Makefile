@@ -1,22 +1,16 @@
 include .env
 
 build:
-	go build ./cmd/main.go
+	docker compose build
 
 test:
 	go test ./... -v -cover
 
-docker-build:
-	docker build --tag exchange:dev  .
-
 run:
-	go run ./cmd/main.go
+	docker compose up -d
 
 lint:
 	golangci-lint run ./...
-
-generate:
-	go generate ./...
 
 migration-status:
 	goose -dir ${MIGRATION_DIR} postgres ${DB_CONN} status -v

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -12,23 +11,11 @@ import (
 	"syscall"
 	"time"
 
-	"rates_service/configs"
+	"rates_service/common"
 
 	"github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
-)
-
-type Pair struct {
-	ID        int
-	Timestamp time.Time
-	Ask       float64
-	Bid       float64
-}
-
-var (
-	db    *sql.DB
-	table string
 )
 
 func statusHandler(w http.ResponseWriter, r *http.Request) {
@@ -43,26 +30,19 @@ func defaultHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	var err error
 
-	configs.Load()
+	err := common.Prepare()
+	if err != nil {
+		log.Fatal("can not start: ", err)
+	}
+	defer common.DB.Close()
 
 	ctx, cancel := InterceptOsSignals()
 	defer cancel()
 
-	table = os.Getenv("DB_TABLE")
-	log.Println(table)
-
-	db, err = sql.Open("postgres", fmt.Sprintf(
-		"postgres://%s:%s@db:%s/%s?sslmode=disable", os.Getenv("DB_USER"), os.Getenv("DB_PASSWORD"), os.Getenv("DB_PORT"), os.Getenv("DB_NAME")))
-	if err != nil {
-		log.Fatal("could not connect to datbase")
-	}
-	defer db.Close()
-
-	log.Println(readPairsfromDb(fmt.Sprintf("SELECT * FROM %s", table)))
-	storePairIntoDb(table, Pair{0, time.Now(), 4.22, 4.33})
-	log.Println(readPairsfromDb(fmt.Sprintf("SELECT * FROM %s", table)))
+	log.Println(readPairsfromDb(fmt.Sprintf("SELECT timestamp, ask, bid FROM %s", common.Market)))
+	storePairIntoDb(common.Market, common.Pair{Timestamp: time.Now(), Ask: 4.22, Bid: 4.33})
+	log.Println(readPairsfromDb(fmt.Sprintf("SELECT timestamp, ask, bid FROM %s", common.Market)))
 
 	run(ctx, cancel)
 
@@ -77,9 +57,9 @@ func run(context.Context, context.CancelFunc) {
 	log.Fatal(http.ListenAndServe(":8000", handlers.LoggingHandler(os.Stdout, r)))
 }
 
-func storePairIntoDb(table string, pair Pair) error {
+func storePairIntoDb(table string, pair common.Pair) error {
 
-	_, err := db.Exec(fmt.Sprintf("INSERT INTO %s (timestamp, ask, bid) VALUES ($1, $2, $3);", table), pair.Timestamp, pair.Ask, pair.Bid)
+	_, err := common.DB.Exec(fmt.Sprintf("INSERT INTO %s (timestamp, ask, bid) VALUES ($1, $2, $3);", table), pair.Timestamp, pair.Ask, pair.Bid)
 
 	if err != nil {
 		return err
@@ -88,17 +68,17 @@ func storePairIntoDb(table string, pair Pair) error {
 	return nil
 }
 
-func readPairsfromDb(query string) (pairs []Pair) {
+func readPairsfromDb(query string) (pairs []common.Pair) {
 
-	rows, err := db.Query(query)
+	rows, err := common.DB.Query(query)
 	if err != nil {
 		log.Println("Error reading from db: ", err)
 		return nil
 	}
 
 	for rows.Next() {
-		var pair Pair
-		err = rows.Scan(&pair.ID, &pair.Timestamp, &pair.Ask, &pair.Bid)
+		var pair common.Pair
+		err = rows.Scan(&pair.Timestamp, &pair.Ask, &pair.Bid)
 		if err != nil {
 			log.Println("Error scaning rows from db: ", err)
 			return nil
